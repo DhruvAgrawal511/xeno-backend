@@ -36,6 +36,22 @@ app.use(cors({
 }));
 app.options('*', cors({ origin: CLIENT_ORIGIN, credentials: true }));
 
+const allowedOrigins = (process.env.CLIENT_ORIGIN || 'http://localhost:5173')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+
+app.use(cors({
+  origin: (origin, cb) => {
+    // allow non-browser requests (curl / Postman) with no origin
+    if (!origin) return cb(null, true);
+    if (allowedOrigins.includes(origin)) return cb(null, true);
+    console.warn('[CORS] blocked origin', origin, 'allowed:', allowedOrigins);
+    return cb(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+  methods: ['GET','POST','PUT','DELETE','OPTIONS'],
+}));
 // body parsing & cookies
 app.use(express.json());
 app.use(cookieParser());
