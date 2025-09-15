@@ -9,7 +9,7 @@ const cfg = {
   mongoUri: process.env.MONGO_URI,
   redisUrl: process.env.REDIS_URL,
 
-  // ✅ Auth-related envs
+  // uth-related envs
   googleClientId: process.env.GOOGLE_CLIENT_ID,
   jwtSecret: process.env.JWT_SECRET,
   cookieName: process.env.COOKIE_NAME || 'xeno_jwt',
