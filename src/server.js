@@ -18,10 +18,11 @@ const app = express();
 
 app.use(cors(
   {
-  origin: cfg.clientOrigin || 'https://xeno-frontend-q5ptmyaer-dhruv-agrawals-projects.vercel.app',
+  origin: process.env.CLIENT_ORIGIN || 'https://xeno-frontend-q5ptmyaer-dhruv-agrawals-projects.vercel.app',
   credentials: true                             
 }
 ));
+app.options('*', cors({ origin: process.env.CLIENT_ORIGIN, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());                         
 
