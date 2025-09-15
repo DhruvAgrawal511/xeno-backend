@@ -1,68 +1,77 @@
-// src/routes/ingest.js  (replace your POST /customers handler)
+// src/routes/ingest.js
 import { Router } from 'express';
-import mongoose from 'mongoose';
-import cfg from '../config/env.js';
+import Customer from '../models/Customer.js'; // ensure path/casing correct
 import { getRedis } from '../config/redis.js';
-// import validators if you want
 
 const router = Router();
-const redis = getRedis(); // your helper to get the redis client
-const STREAM = 'ingest:customers'; // use your stream name, adjust if different
 
+/**
+ * POST /api/customers
+ * Accepts: { name, email, phone?, total_spend?, visits? }
+ * Response: { ok: true, customer: { ... } }
+ */
 router.post('/customers', async (req, res) => {
   try {
-    const { name, email, phone, total_spend = 0, visits = 0 } = req.body || {};
+    const body = req.body || {};
+    const name = (body.name || '').toString().trim();
+    const email = (body.email || '').toString().trim();
+    const phone = body.phone ? body.phone.toString().trim() : '';
+    const total_spend = Number(body.total_spend || 0);
+    const visits = Number(body.visits || 0);
 
-    // basic validation (expand as needed)
-    if (!name || !email) {
-      return res.status(400).json({ error: 'name and email required' });
-    }
+    // Basic validation
+    if (!name) return res.status(400).json({ error: 'name_required' });
+    if (!email) return res.status(400).json({ error: 'email_required' });
 
-    // Generate a Mongo ObjectId on API side so we can return it immediately
-    const newId = new mongoose.Types.ObjectId();
-
-    // Build payload that consumer will eventually persist
-    const payload = {
-      _id: newId.toString(),   // string form
+    // Create customer in DB
+    const doc = await Customer.create({
       name,
       email,
-      phone: phone || '',
-      total_spend: Number(total_spend) || 0,
-      visits: Number(visits) || 0,
-      createdAt: new Date().toISOString()
-    };
+      phone,
+      total_spend,
+      visits,
+      createdAt: new Date()
+    });
 
-    // push to redis stream (xadd). Use '*' or timestamp depending on your implementation
-    // This assumes redis client supports xAdd / XADD via .xAdd or .xAdd alias.
-    // If you use node-redis v4: use redis.sendCommand or use client.xAdd if available.
-    await redis.xAdd(STREAM, '*', { payload: JSON.stringify(payload) });
+    // Optionally push to Redis stream/queue if available (non-fatal)
+    try {
+      const redis = getRedis?.();
+      if (redis && typeof redis.xadd === 'function') {
+        // push a compact payload to stream 'customers'
+        await redis.xadd('customers', '*', 'id', doc._id.toString(), 'payload', JSON.stringify({
+          id: doc._id.toString(),
+          name, email, phone, total_spend, visits
+        }));
+      } else if (redis && typeof redis.sendCommand === 'function') {
+        // ioredis or other clients might use sendCommand
+        // This block attempts a generic xadd
+        await redis.sendCommand(['XADD', 'customers', '*', 'id', doc._id.toString(), 'payload', JSON.stringify({
+          id: doc._id.toString(),
+          name, email, phone, total_spend, visits
+        })]);
+      }
+    } catch (ePush) {
+      // Redis push failing should not block response - log and continue
+      console.warn('[INGEST] Warning: redis publish failed:', ePush?.message || ePush);
+    }
 
-    // return id to client immediately — indicates queued
-    return res.json({ ok: true, id: payload._id, queued: true });
-  } catch (err) {
-    console.error('POST /customers error', err);
-    return res.status(500).json({ error: 'server_error' });
-  }
-});
+    // Return created record (safe)
+    return res.json({ ok: true, customer: {
+      id: doc._id.toString(),
+      name: doc.name, email: doc.email, phone: doc.phone,
+      total_spend: doc.total_spend, visits: doc.visits
+    }});
+  } catch (e) {
+    // Log server-side full error (useful for Render / local logs)
+    console.error('[INGEST] create customer failed:', e && e.stack ? e.stack : e);
 
-// src/routes/ingest.js  (or customers.js) - add this route
-router.put('/customers/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const updates = req.body || {};
-
-    // sanitize / allow only certain fields
-    const allowed = ['name','email','phone','total_spend','visits'];
-    const safe = {};
-    for (const k of allowed) if (typeof updates[k] !== 'undefined') safe[k] = updates[k];
-
-    const updated = await Customer.findByIdAndUpdate(id, safe, { new: true });
-    if (!updated) return res.status(404).json({ error: 'not_found' });
-
-    return res.json({ ok: true, customer: updated });
-  } catch (err) {
-    console.error('PUT /customers/:id error', err);
-    return res.status(500).json({ error: 'server_error' });
+    // Return safe error message. In development, include stack to help debug.
+    const isProd = process.env.NODE_ENV === 'production';
+    return res.status(500).json({
+      error: 'server_error',
+      message: e?.message || String(e),
+      ...(isProd ? {} : { stack: e?.stack?.toString?.() })
+    });
   }
 });
 
