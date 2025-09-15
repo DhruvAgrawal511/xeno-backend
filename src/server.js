@@ -17,10 +17,10 @@ import requireAuth from './middleware/auth.js';
 const app = express();
 
 app.use(cors(
-//   {
-//   origin: cfg.clientOrigin || 'http://localhost:5173',
-//   credentials: true                             
-// }
+  {
+  origin: cfg.clientOrigin || 'https://xeno-frontend-q5ptmyaer-dhruv-agrawals-projects.vercel.app',
+  credentials: true                             
+}
 ));
 app.use(express.json());
 app.use(cookieParser());                         
