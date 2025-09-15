@@ -3,10 +3,10 @@ import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import cfg from './config/env.js';
-import { connectMongo } from './config/db.js';   // keep your existing
-import { getRedis } from './config/redis.js';    // keep your existing
+import { connectMongo } from './config/db.js';
+import { getRedis } from './config/redis.js';
 
-// import your existing route modules
+// regular routes (these should exist in your repo)
 import healthRoutes from './routes/health.js';
 import ingestRoutes from './routes/ingest.js';
 import segmentRoutes from './routes/segments.js';
@@ -14,21 +14,19 @@ import campaignRoutes from './routes/campaigns.js';
 import vendorRoutes from './routes/vendor.js';
 import receiptRoutes from './routes/receipts.js';
 import authRoutes from './routes/auth.js';
-import debugRoutes from './routes/debug.js'; // temporary - remove after debugging
 
 const app = express();
 
-// trust proxy (Render/Vercel) so secure cookies work
+// trust proxy (important for secure cookies behind proxies)
 app.set('trust proxy', 1);
 
-// --- COOP/COEP: relax so Google Identity postMessage works ---
+// Relax COOP so Google Identity postMessage works
 app.use((req, res, next) => {
   res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
-  // do not set Cross-Origin-Embedder-Policy globally in this app
   next();
 });
 
-// --- CORS: exact origin and credentials true (very important) ---
+// CORS: exact origin + credentials
 const CLIENT_ORIGIN = cfg.clientOrigin;
 app.use(cors({
   origin: CLIENT_ORIGIN,
@@ -36,33 +34,43 @@ app.use(cors({
   methods: ['GET','POST','PUT','DELETE','OPTIONS'],
   allowedHeaders: ['Content-Type','Authorization','X-Requested-With']
 }));
-
-// support preflight across the board
-app.options('*', cors({
-  origin: CLIENT_ORIGIN,
-  credentials: true
-}));
+app.options('*', cors({ origin: CLIENT_ORIGIN, credentials: true }));
 
 // body parsing & cookies
 app.use(express.json());
 app.use(cookieParser());
 
-// routes (order matters: auth before protected if you have middleware)
+// mount primary routes
 app.use('/api', healthRoutes);
 app.use('/api', ingestRoutes);
-app.use('/api', authRoutes);        // auth endpoints
+app.use('/api', authRoutes);
 app.use('/api', segmentRoutes);
 app.use('/api', campaignRoutes);
 app.use('/api', vendorRoutes);
 app.use('/api', receiptRoutes);
-app.use('/api', debugRoutes);       // temporary debugging route
 
+// Try to import optional debug routes (won't crash if missing)
+(async () => {
+  try {
+    const mod = await import('./routes/debug.js');
+    if (mod && mod.default) {
+      app.use('/api', mod.default);
+      console.log('[INFO] debug routes mounted');
+    } else {
+      console.log('[INFO] debug routes module loaded but no default export');
+    }
+  } catch (e) {
+    console.log('[INFO] debug routes not found - skipping (this is OK in production)');
+  }
+})();
+
+// root
 app.get('/', (req, res) => res.send('Backend application is running.'));
 
 async function start() {
   try {
-    await connectMongo();    // must exist in your repo
-    getRedis();              // must exist in your repo
+    await connectMongo();
+    getRedis();
     app.listen(cfg.port, () => {
       console.log(`Server on http://localhost:${cfg.port} (CLIENT_ORIGIN=${CLIENT_ORIGIN})`);
     });
