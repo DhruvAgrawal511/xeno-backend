@@ -105,10 +105,9 @@ Here’s a summary of the main backend technologies:
 | :-------------------- | :---------------------------------- | :---------------------------------- |
 | **Runtime** | Node.js                             | Server runtime                      |
 | **Framework** | Express.js                          | REST API framework                  |
-| **Database** | MongoDB + Mongoose                  | Persistent storage                  |
-| **Caching / Streaming**| Redis (ioredis / node-redis)      | Caching & Redis Streams             |
-| **Authentication** | JWT (jsonwebtoken)                  | Token-based authentication          |
-| **Validation** | Joi / Validator                     | Request validation                  |
+| **Database** | MongoDB                   | Persistent storage                  |
+| **Caching / Streaming**| Redis       | Caching & Redis Streams             |
+| **Authentication** | JWT                   | Token-based authentication          |
 | **Environment Config**| dotenv                              | Load `.env` configs                 |
 | **Deployment / Hosting**| Render (Backend) + Vercel (Frontend integration) | Hosting               |
 
